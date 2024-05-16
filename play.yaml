@@ -1,0 +1,105 @@
+- name: Update web servers
+  hosts: all
+  tasks:
+
+
+
+
+
+
+
+
+  - name: update system packages
+    become: true
+    ansible.builtin.command: apt-get --simulate dist-upgrade
+
+  - name: update system packages
+    become: true
+    apt:
+      pkg:
+        - python3
+        - python3-pip
+        - git
+        - jq
+        - docker.io
+        - docker-compose
+        - docker-compose-v2
+
+      state: latest
+      update_cache: true
+
+
+
+  - name: CLONING REPO
+    become: true
+    ansible.builtin.file:
+      path: "/www"
+      state: absent
+
+
+  - name: Cloning git repository 
+    become: true
+    ansible.builtin.shell:
+      cmd: git clone https://github.com/9NEkot/ansible-upload /www
+
+
+
+
+
+  - name: create output file
+    become: true
+    ansible.builtin.shell:
+      cmd: touch /www/docker-out.txt
+
+
+  - name: Check that status pipe exists 
+    become: true
+    stat:
+      path: /www/docker-status-pipe
+    register: stat_result
+
+  - name: Create the file, if it doesnt exist already
+    become: true
+    ansible.builtin.shell:
+      cmd: mkfifo /www/docker-status-pipe
+    when: not stat_result.stat.exists
+
+
+  - name: Create the file, if it doesnt exist already
+    become: true
+    ansible.builtin.shell:
+      cmd: echo 'while true; do eval "$(cat /www/docker-status-pipe) > /www/docker-out.txt"; done' > /www/pipe.sh 
+    when: not stat_result.stat.exists
+
+
+  - name: usermod ag user docker
+    become: true
+    ansible.builtin.shell:
+      cmd: usermod -aG docker $USER
+
+    
+
+
+
+
+
+
+
+
+# mind the _v2 suffix
+  - name: deploy Docker Compose stack
+    become: true
+    community.docker.docker_compose_v2:
+      project_src: /www
+      files:
+      - docker-compose.yaml
+
+
+
+  - name: add cron jobn
+    become: true
+    ansible.builtin.cron:
+      name: "check dirs"
+      user: "root"
+      special_time: reboot
+      job: "bash /www/pipe.sh"
